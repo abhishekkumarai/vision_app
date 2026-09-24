@@ -13,7 +13,7 @@ not in it).
 |---|---|---|
 | `backend/` | FastAPI + MediaPipe Python + multi-provider LLM | the single shared API |
 | `flutter_frontend/` | Flutter (web/Android/iOS) client, served by nginx on **:3020** | **newest, actively worked on** |
-| `frontend/` | Next.js 14 App Router client on **:3010** | working, older |
+| `frontend/` | Next.js 14 client on **:3010** — same UX as Flutter, shadcn/ui + Tailwind | working |
 | `frontend_static/` | vanilla HTML/JS fallback, served by the backend at `/` | legacy |
 | `tests/` | `test_app.py` (unit, TestClient), `test_contract.py` (API shapes), `test_integration_full.py` (hits live :8000/:3010) | |
 | `docker-compose.yml` | `backend`, `frontend`, `flutter-web` on network `vision-net` | |
@@ -41,15 +41,55 @@ Python tooling: **always `uv`** (per `goal.md`). `uv run pytest tests/test_app.p
 - `config.py` — pydantic-settings, reads `.env` (see `.env.example`). In Docker,
   Ollama is reached via `host.docker.internal:11434`.
 
+## Event-driven workflows (Epic KAN-88)
+
+Architecture: **detect on the device, run workflows on the server.** Clients send small,
+debounced *events* instead of frames; WebRTC/RTSP ingest (KAN-95) is a later second event
+source into the same pipeline.
+
+- `POST /api/events` (202) takes `DetectionEvent {type='object_appeared', label, confidence,
+  box (normalized), image_b64 crop?, source, client_id, provider?}`. Server-side dedupe: same
+  `client_id`+`label` within `EVENT_COOLDOWN_SECONDS` (30 s) → stored as `deduplicated`, no workflow.
+  `GET /api/events?limit&label`, `GET /api/events/{id}` return `EventRecord` with `runs[]`
+  (the crop is stored but never returned — `has_image` only).
+- `backend/event_store.py` — SQLite (stdlib), `EVENTS_DB_PATH` (default `backend/data/events.db`,
+  Docker named volume `vision-events`).
+- `backend/workflows.py` — `WorkflowEngine.register(event_type, name, async fn)`; runs every
+  workflow for the event's type via FastAPI `BackgroundTasks`, records a `WorkflowRun`
+  (status/timings/result/error) per workflow; one failure doesn't stop the others.
+  Built-in: `identify_object` → `LLMService.identify_object` with the event crop.
+  Add actions/integrations here (KAN-94).
+- Clients: an *appearance tracker* (`frontend/lib/events.ts`,
+  `flutter_frontend/lib/services/appearance_tracker.dart` — same rules: stable ≥700 ms,
+  gap >500 ms resets, 30 s per-label cooldown) emits one event per newly stable object.
+  Toggle "Send workflow events" in Settings (default on).
+
 ## Clients — where detection runs
 
-- **Next.js** (`frontend/components/CameraViewfinder.tsx`): raw `getUserMedia` +
-  **in-browser** MediaPipe WASM (`@mediapipe/tasks-vision` from jsDelivr). Uses the
-  backend only for identify/chat through the proxy `app/api/[...path]/route.ts`
-  (`BACKEND_URL=http://backend:8000`).
-- **Flutter** (`flutter_frontend/lib/`): uses the `camera` plugin; every
-  `detectIntervalMs` (350 ms) it `takePicture()`s and POSTs the frame to backend
-  `/api/detect` (**server-side** detection).
+- **Next.js** (`frontend/`) — deliberately mirrors the Flutter client's layout and flow
+  (KAN-87). UI is shadcn/ui (`components/ui/*`, generated with `shadcn@2.3.0` because the
+  project is on Tailwind v3 + React 18) themed with the Flutter palette in `app/globals.css`
+  (HSL tokens; `--success` = emerald for selection/state).
+  - `components/vision-provider.tsx` — React context, the counterpart of Flutter's
+    `VisionProvider`: camera lifecycle (skips `NotReadableError` devices such as an idle OBS
+    camera), detection loop, demo feed, identify (crops snapshot), chat, shared `view` state.
+  - Detection runs **in-browser** (`@mediapipe/tasks-vision`, GPU then CPU delegate) every
+    video frame; if MediaPipe can't load it **falls back to server `/api/detect`** every
+    `detectIntervalMs` (`lib/api.ts`). Boxes are normalized 0..1 like Flutter's `Box2D`.
+  - `components/app-shell.tsx` — ≥850px desktop (camera 3fr | Tabs 2fr) vs mobile bottom nav;
+    only one layout renders so there is a single `<video>`; mobile screens stay mounted.
+  - `camera-view.tsx`, `detection-overlay.tsx` (boxes are `<button>`s over an object-contain
+    frame; no canvas, not mirrored), `object-card.tsx`, `chat-panel.tsx`, `status-bar.tsx`,
+    `settings-dialog.tsx` (persists to localStorage).
+  - All backend calls go through `app/api/[...path]/route.ts` (`BACKEND_URL=http://backend:8000`).
+- **Flutter** (`flutter_frontend/lib/`): uses the `camera` plugin.
+  - **Web: on-device** (KAN-92) — `web/mediapipe_bridge.js` (ES module, loaded from
+    `index.html`) runs MediaPipe `detectForVideo` on the live `<video>`, which the vendored
+    `camera_web` publishes as `window.__flutterCameraVideo` (second `LOCAL PATCH`). Dart side:
+    `lib/services/platform_services*.dart` (`OnDeviceDetector`, conditional import on
+    `dart.library.js_interop`); loop every 33 ms, ~20–30 FPS, nothing uploaded.
+  - **Fallback / native:** every `detectIntervalMs` (350 ms) `takePicture()` → POST
+    `/api/detect` (~2–3 FPS). Native on-device detection is KAN-93.
   - `state/vision_provider.dart` — `VisionProvider` (ChangeNotifier): camera
     lifecycle, detection loop, virtual "demo mode" (fake desk-scene boxes), identify, chat.
   - `services/api_service.dart` — HTTP client. Default base URL
@@ -98,3 +138,11 @@ Python tooling: **always `uv`** (per `goal.md`). `uv run pytest tests/test_app.p
 
 backend `:8000` (Swagger `/docs`) · Next.js `:3010` · Flutter web `:3020`
 (nginx proxies `/api/` → backend, but the Flutter app calls `localhost:8000` directly by default).
+
+## Do's and Dont's
+- Don't use AI slop based UI colors.
+- Don't invent new features.
+- Always use shadcn for flutter UI.
+- Always use tailwind for nextjs ui.
+- Always use uv for python package and its virtual environment.
+- Always use flutter for cross platform.

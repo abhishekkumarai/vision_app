@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
+    # Event-driven workflows (KAN-89/90)
+    EVENTS_DB_PATH: str = str(BASE_DIR / "backend" / "data" / "events.db")
+    EVENT_COOLDOWN_SECONDS: float = 30.0
+
     # Static & Frontend paths
     FRONTEND_DIR: str = str(BASE_DIR / "frontend_static")
 

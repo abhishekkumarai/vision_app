@@ -72,9 +72,10 @@ Get-ChildItem $b -Recurse | % { $p = Get-ItemProperty $_.PSPath
 `getUserMedia` only works in a **secure context**: `https://` or `http://localhost`. Opening
 `http://<LAN-IP>:3020` from a phone won't expose the camera. Use HTTPS (reverse proxy or tunnel) or test on the host itself.
 
-### Next.js (`:3010`) camera shows an `alert()` error
-Same causes as above. The Next.js client calls `getUserMedia` directly, so it isn't affected by the
-`camera_web` bug. It does use `facingMode: "environment"`, which some laptops ignore; that's harmless.
+### Next.js (`:3010`) shows "Camera unavailable"
+Same causes as above; the card shows the friendly reason plus the raw error. The Next.js client
+calls `getUserMedia` directly (not `camera_web`), and on `NotReadableError` it automatically tries
+the other cameras, so an idle OBS virtual camera is skipped.
 
 ---
 
@@ -90,9 +91,11 @@ Same causes as above. The Next.js client calls `getUserMedia` directly, so it is
 Boxes arrive in pixels and are normalized with `image_width` / `image_height` from `/api/detect`. If
 those fields are missing (old backend image), the boxes break. Rebuild the backend with `docker compose up -d --build backend`.
 
-### Next.js labels read backwards / clicking a box locks a different one
-The canvas is CSS-mirrored. Fixed in `CameraViewfinder.tsx` (click X mirrored) and `lib/hud.ts`
-(label flipped back) under KAN-76. It still needs an on-screen check.
+### Next.js shows "0.x fps" or detection seems frozen
+In-browser detection runs on `requestAnimationFrame`, which browsers pause in background or
+hidden tabs (automation tabs included). Bring the tab to the foreground. If Settings → Detection
+engine says *Server-side*, in-browser MediaPipe failed to load (CDN blocked / no WebGL) and frames
+are sent to `/api/detect` every *Server detection interval* instead.
 
 ---
 
@@ -116,6 +119,26 @@ cd flutter_frontend; flutter test test/api_contract_test.dart
 ```
 
 ---
+
+## Events & workflows
+
+### No events reach `/api/events`
+- Settings → **Send workflow events** must be on (both clients).
+- An object must stay in view ≥ 0.7 s, and each label fires at most once per 30 s per device —
+  a steady scene produces no new events. Check `curl localhost:8000/api/events?limit=5`.
+- A second event within 30 s from the same `client_id` is stored with status `deduplicated`
+  and runs no workflow — that's expected.
+
+### Event is `failed`
+`GET /api/events/{id}` → `runs[].error` has the exception. Workflows fail independently; LLM
+provider problems usually still *succeed* via the offline fallback (see `model_used`).
+
+### Flutter web still shows ~2–3 FPS (server detection)
+Settings → *Detection engine* should say **MediaPipe (in-browser)**. If it says *Server*:
+the bridge didn't load (`window.visionBridge` undefined → stale cache or CDN blocked; check
+DevTools console for `[visionBridge]`), or the camera `<video>` isn't published
+(`window.__flutterCameraVideo` undefined → the vendored `camera_web` patch is missing; run
+`flutter pub get` and rebuild).
 
 ## Deploy / build
 

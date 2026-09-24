@@ -10,7 +10,8 @@ try:
 except ImportError:
     torch = None
     HAS_TORCH = False
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from typing import List, Optional
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from backend.config import settings
 from backend.detector import detector_instance
 from backend.llm_service import llm_service_instance
+from backend.event_store import EventStore
+from backend.workflows import build_default_engine
 from backend.schemas import (
     DetectionRequest,
     DetectionResponse,
@@ -26,7 +29,10 @@ from backend.schemas import (
     ObjectInsights,
     ChatRequest,
     ChatResponse,
-    HealthResponse
+    HealthResponse,
+    DetectionEvent,
+    EventAccepted,
+    EventRecord,
 )
 
 app = FastAPI(
@@ -43,6 +49,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Event-driven workflows (Epic KAN-88)
+event_store = EventStore(settings.EVENTS_DB_PATH)
+workflow_engine = build_default_engine(event_store)
 
 frontend_path = Path(settings.FRONTEND_DIR)
 frontend_path.mkdir(parents=True, exist_ok=True)
@@ -120,6 +130,32 @@ async def list_providers():
         "gemini_model": settings.GEMINI_MODEL,
         "has_gemini_key": bool(settings.GEMINI_API_KEY)
     }
+
+@app.post("/api/events", response_model=EventAccepted, status_code=202)
+async def ingest_event(event: DetectionEvent, background: BackgroundTasks):
+    """Accept a client detection event; matching workflows run asynchronously (KAN-89/90)."""
+    if event_store.is_duplicate(event.client_id, event.label, settings.EVENT_COOLDOWN_SECONDS):
+        event_id = event_store.add(event.model_copy(update={"image_b64": None}), status="deduplicated")
+        return EventAccepted(id=event_id, status="deduplicated",
+                             detail=f"'{event.label}' already reported by this client in the last "
+                                    f"{settings.EVENT_COOLDOWN_SECONDS:.0f}s")
+    event_id = event_store.add(event)
+    background.add_task(workflow_engine.process, event_id)
+    workflows = workflow_engine.workflows_for(event.type)
+    return EventAccepted(id=event_id, status="queued",
+                         detail=f"workflows: {', '.join(workflows) or 'none'}")
+
+@app.get("/api/events", response_model=List[EventRecord])
+async def list_events(limit: int = Query(50, ge=1, le=500), label: Optional[str] = None):
+    """Most recent events first, with workflow runs and results."""
+    return event_store.list(limit=limit, label=label)
+
+@app.get("/api/events/{event_id}", response_model=EventRecord)
+async def get_event(event_id: int):
+    record = event_store.get(event_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return record
 
 # Mount static frontend
 if frontend_path.exists():

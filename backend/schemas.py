@@ -65,3 +65,51 @@ class HealthResponse(BaseModel):
     mediapipe_ready: bool
     gpu_available: bool
     gpu_name: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Event-driven workflows (Epic KAN-88: KAN-89, KAN-90)
+# ---------------------------------------------------------------------------
+
+class EventBox(BaseModel):
+    """Normalized (0..1) box, same convention as the clients."""
+    xmin: float = Field(..., ge=0.0, le=1.0)
+    ymin: float = Field(..., ge=0.0, le=1.0)
+    xmax: float = Field(..., ge=0.0, le=1.0)
+    ymax: float = Field(..., ge=0.0, le=1.0)
+
+class DetectionEvent(BaseModel):
+    type: str = Field("object_appeared", description="Event type; routes to workflows")
+    label: str = Field(..., min_length=1, description="Detected class label")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    box: Optional[EventBox] = None
+    image_b64: Optional[str] = Field(None, description="Optional JPEG crop of the object (data URL or raw base64)")
+    source: str = Field("unknown", description="Emitting client, e.g. 'nextjs', 'flutter-web'")
+    client_id: str = Field("anonymous", description="Stable per-device id, used for dedupe")
+    provider: Optional[str] = Field(None, description="LLM provider override for workflow steps")
+
+class WorkflowRun(BaseModel):
+    workflow: str
+    status: str = Field(..., description="'succeeded' | 'failed'")
+    started_at: float
+    finished_at: float
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+class EventRecord(BaseModel):
+    id: int
+    type: str
+    label: str
+    confidence: float
+    box: Optional[EventBox] = None
+    source: str
+    client_id: str
+    has_image: bool
+    received_at: float
+    status: str = Field(..., description="'queued' | 'running' | 'done' | 'failed' | 'deduplicated'")
+    runs: List[WorkflowRun] = Field(default_factory=list)
+
+class EventAccepted(BaseModel):
+    id: Optional[int] = None
+    status: str
+    detail: Optional[str] = None

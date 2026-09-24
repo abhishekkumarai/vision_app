@@ -12,10 +12,10 @@ Status legend: ✅ done · 🔍 in review (code done, awaiting on-screen check) 
 
 | Area | Feature | Where |
 |---|---|---|
-| Detection | MediaPipe EfficientDet-Lite0 object detection — server-side (FastAPI) and in-browser WASM/GPU (Next.js) | `backend/detector.py`, `frontend/components/CameraViewfinder.tsx` |
+| Detection | MediaPipe EfficientDet-Lite0 object detection — server-side (FastAPI) and in-browser WASM/GPU (Next.js, with server fallback) | `backend/detector.py`, `frontend/components/vision-provider.tsx` |
 | Intelligence | Multi-provider LLM identify: Ollama (Gemma 2), Google Gemini (multimodal), curated offline knowledge base, generic fallback | `backend/llm_service.py` |
 | Chat | Contextual Q&A about the identified object | `/api/chat` |
-| Next.js UI | Cyberpunk HUD canvas, auto-lock highest-score target, crop-and-inspect, text-to-speech narration, provider selector | `frontend/` |
+| Next.js UI | Same layout/flow as Flutter (desktop split + mobile bottom nav), shadcn/ui + Tailwind, tap-to-inspect boxes, virtual demo feed, read-aloud summary, settings dialog | `frontend/` |
 | Flutter UI | Cross-platform (web / Android / iOS), adaptive desktop ↔ mobile layout, tap-to-select boxes, settings dialog, camera diagnostics card, **virtual demo feed** | `flutter_frontend/` |
 | Ops | Docker Compose: backend (:8000) + Next.js (:3010) + Flutter/nginx (:3020), healthchecks, cached model | `docker-compose.yml` |
 
@@ -34,7 +34,7 @@ Status legend: ✅ done · 🔍 in review (code done, awaiting on-screen check) 
 | B7 | [KAN-73](https://emailabhishek2.atlassian.net/browse/KAN-73) | Medium | ✅ | Flutter's selected LLM provider is never sent to the backend. |
 | B8 | [KAN-74](https://emailabhishek2.atlassian.net/browse/KAN-74) | Medium | ✅ | Backend blocks the event loop (sync MediaPipe / Gemini in async handlers); detect `threshold` ignored. |
 | B9 | [KAN-75](https://emailabhishek2.atlassian.net/browse/KAN-75) | Medium | ✅ | Backend chat ignores conversation history. |
-| B10 | [KAN-76](https://emailabhishek2.atlassian.net/browse/KAN-76) | Medium | 🔍 | Next.js HUD labels render mirrored; click-to-lock selects the wrong (mirrored) box. |
+| B10 | [KAN-76](https://emailabhishek2.atlassian.net/browse/KAN-76) | Medium | ✅ | Next.js HUD labels render mirrored; click-to-lock selects the wrong (mirrored) box. *Superseded by KAN-87: the canvas HUD was replaced by an unmirrored button overlay.* |
 
 ## 🚀 Features in scope (this epic)
 
@@ -44,12 +44,13 @@ Status legend: ✅ done · 🔍 in review (code done, awaiting on-screen check) 
 | F2 | [KAN-78](https://emailabhishek2.atlassian.net/browse/KAN-78) | Medium | ✅ | Flutter rich insight card; suggested questions start a chat. |
 | F3 | [KAN-79](https://emailabhishek2.atlassian.net/browse/KAN-79) | High | ✅ | API contract tests (backend pytest + Flutter parsing/request tests). |
 | F4 | [KAN-80](https://emailabhishek2.atlassian.net/browse/KAN-80) | Low | ✅ | Docs: README + LLM.md cover the Flutter edition and build/deploy. |
+| F5 | [KAN-87](https://emailabhishek2.atlassian.net/browse/KAN-87) | Medium | ✅ | Next.js UI parity with the Flutter app — shadcn/ui + Tailwind, desktop split + mobile bottom nav. |
 
 ## 📋 Backlog (not scheduled)
 
 | # | Jira | Item |
 |---|---|---|
-| BL1 | [KAN-81](https://emailabhishek2.atlassian.net/browse/KAN-81) | Next.js server-side detection fallback when MediaPipe WASM/GPU fails. |
+| BL1 | [KAN-81](https://emailabhishek2.atlassian.net/browse/KAN-81) | ✅ ~~Next.js server-side detection fallback when MediaPipe WASM/GPU fails.~~ Delivered with KAN-87. |
 | BL2 | [KAN-82](https://emailabhishek2.atlassian.net/browse/KAN-82) | Flutter faster detection transport (WebSocket / downscaled frames / in-browser MediaPipe). |
 | BL3 | [KAN-83](https://emailabhishek2.atlassian.net/browse/KAN-83) | Streaming LLM responses (SSE) for identify & chat. |
 | BL4 | [KAN-84](https://emailabhishek2.atlassian.net/browse/KAN-84) | Upstream the `camera_web` fix; drop the vendored override. |
@@ -64,5 +65,30 @@ Status legend: ✅ done · 🔍 in review (code done, awaiting on-screen check) 
 - Flutter: `flutter test` → 17 passed (models, widgets, API contract, frame cropper); `flutter analyze` → no errors/warnings.
 - Next.js: `tsc --noEmit` clean.
 - Live, Chrome @ localhost:3020 (webcam): detect calls go same-origin via nginx → 200, "person 88-92%" boxes drawn; tapping the detection → `/api/identify` 200 with cropped snapshot, full insight card + suggested questions; chat question → `/api/chat` 200 with answer.
-- **Not yet verified on screen:** KAN-76 (Next.js mirrored HUD) — needs a foreground tab with the camera.
+- Next.js rebuild (KAN-87): `next build` clean; verified in Chrome — desktop demo flow (boxes → identify → insight card → suggested question → chat), mobile 390px screens (camera + banner, intelligence, chat, bottom nav), live webcam with in-browser MediaPipe (`person 75%` box).
 - **Environment note:** local Ollama only has `qwen3.5b`; backend asks for `gemma2:2b`, so LLM answers currently come from the offline fallback. `ollama pull gemma2:2b` or set `OLLAMA_MODEL`.
+
+---
+
+# Epic [KAN-88](https://emailabhishek2.atlassian.net/browse/KAN-88) — Event-driven vision workflows
+
+Decision: **on-device detection + server-side LLM workflows** by default; WebRTC/RTSP ingest
+later as a second event source for continuous / multi-camera use cases.
+
+| # | Jira | Status | Item |
+|---|---|---|---|
+| E1 | [KAN-89](https://emailabhishek2.atlassian.net/browse/KAN-89) | ✅ | `POST/GET /api/events` + SQLite event store, server-side dedupe |
+| E2 | [KAN-90](https://emailabhishek2.atlassian.net/browse/KAN-90) | ✅ | Workflow engine v1 — `identify_object` workflow, per-run status/result/error |
+| E3 | [KAN-91](https://emailabhishek2.atlassian.net/browse/KAN-91) | ✅ | Clients emit debounced `object_appeared` events (Next.js + Flutter), Settings toggle |
+| E4 | [KAN-92](https://emailabhishek2.atlassian.net/browse/KAN-92) | ✅ | Flutter web on-device MediaPipe (JS bridge) — ~2–3 → ~23 FPS, no frame uploads |
+| E5 | [KAN-93](https://emailabhishek2.atlassian.net/browse/KAN-93) | 📋 | Flutter Android/iOS on-device detection (`tflite_flutter`) |
+| E6 | [KAN-94](https://emailabhishek2.atlassian.net/browse/KAN-94) | 📋 | Workflow actions (WhatsApp/Hermes, email, Jira) + activity feed UI |
+| E7 | [KAN-95](https://emailabhishek2.atlassian.net/browse/KAN-95) | 📋 | WebRTC / RTSP ingest as a second event source |
+
+KAN-82 (faster Flutter transport) is superseded by KAN-92 (web) / KAN-93 (native).
+
+Verified 2026-09-24: pytest 17 passed (incl. `tests/test_events.py`), flutter test 23 passed;
+live — Flutter web on-device `person` box at 22.8 FPS with zero `/api/detect` calls → event #3
+(`flutter-web`, with crop) → `identify_object` succeeded; Next.js demo feed → events #4–6
+(laptop, cell phone, cup) with "Workflow queued" toasts → all succeeded; duplicate within 30 s
+→ `deduplicated`.

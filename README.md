@@ -4,7 +4,7 @@
 
 A cutting-edge real-time computer vision application that tracks whatever is in front of the camera using **MediaPipe**, identifies objects, and uses an **LLM** (e.g. Gemma 3.2B / 2B, Ollama, Google Gemini, or offline fast engine) to provide rich encyclopedic knowledge, technical specifications, safety tips, and interactive Q&A.
 
-**Frontend:** Built with **Next.js 14 (App Router)**, **React 18**, **Tailwind CSS**, and **Lucide React**.  
+**Frontends:** **Next.js 14** (React 18, **shadcn/ui** + **Tailwind CSS**, Lucide) and **Flutter** (web / Android / iOS) — same layout and flow in both.  
 **Backend:** Built with **FastAPI**, **MediaPipe Python**, and multi-provider LLM integration.  
 **Deployment:** Fully dockerized with **Docker Compose** (multi-stage production builds and automatic healthchecks).
 
@@ -61,6 +61,8 @@ docker compose up -d
 
 > **Ollama model:** the backend requests `OLLAMA_MODEL` (default `gemma2:2b`). If that model isn't pulled, every request silently falls back to the offline knowledge base — `ollama pull gemma2:2b` or set `OLLAMA_MODEL` in `.env` to a model you have.
 
+Event-driven workflows: clients detect on-device and `POST /api/events`; the backend runs LLM workflows per event (`GET /api/events` to inspect) — see LLM.md.
+
 Troubleshooting: [`troubleshoot.md`](troubleshoot.md) · Task tracking: [`TASKS.md`](TASKS.md) (Jira epic KAN-66) · Architecture orientation for humans & LLMs: [`LLM.md`](LLM.md)
 
 To view real-time logs:
@@ -89,6 +91,8 @@ vision_app/
 │   ├── llm_service.py         # Multi-provider LLM adapter (Ollama, Gemini, Offline)
 │   ├── main.py                # FastAPI entrypoint & REST API
 │   ├── schemas.py             # Pydantic models for request/response validation
+│   ├── event_store.py         # SQLite store for detection events + workflow runs
+│   ├── workflows.py           # Workflow engine (event → LLM workflows)
 │   └── models/
 │       ├── download_models.py # Model downloader for EfficientDet-Lite0
 │       └── efficientdet_lite0.tflite
@@ -102,11 +106,16 @@ vision_app/
 │   │   ├── globals.css        # Tailwind & Cyberpunk scanline styles
 │   │   └── api/[...path]/route.ts # Runtime dynamic reverse-proxy to FastAPI backend
 │   ├── components/
-│   │   ├── Header.tsx         # Telemetry bar, engine/GPU status & provider selector
-│   │   ├── CameraViewfinder.tsx # MediaPipe camera tracking & canvas HUD
-│   │   └── InsightsPanel.tsx  # Deep encyclopedic view & follow-up chat
+│   │   ├── vision-provider.tsx  # App state: camera, detection loop, demo feed, identify, chat
+│   │   ├── app-shell.tsx        # Desktop split (camera | tabs) vs mobile bottom-nav layout
+│   │   ├── camera-view.tsx      # Idle / error / demo / live states + controls
+│   │   ├── detection-overlay.tsx# Tap-to-inspect boxes over the video
+│   │   ├── object-card.tsx      # Intelligence card (uses, specs, safety, facts, questions)
+│   │   ├── chat-panel.tsx       # Assistant chat
+│   │   ├── status-bar.tsx / settings-dialog.tsx
+│   │   └── ui/                  # shadcn/ui primitives
 │   ├── lib/
-│   │   ├── hud.ts             # 60fps canvas reticle and box drawing
+│   │   ├── api.ts             # Typed backend client (detect / identify / chat)
 │   │   ├── speech.ts          # Web Speech API text-to-speech helper
 │   │   └── types.ts           # Shared TypeScript interfaces
 │   ├── next.config.mjs        # Next.js configuration (output: standalone)
@@ -120,7 +129,8 @@ vision_app/
 ├── frontend_static/           # Preserved standalone static HTML fallback
 ├── tests/
 │   ├── test_app.py            # Automated pytest suite
-│   └── test_contract.py       # API request/response contract tests
+│   ├── test_contract.py       # API request/response contract tests
+│   └── test_events.py         # Events API + workflow engine tests
 ├── requirements.txt           # Python backend dependencies
 └── .env.example               # Environment variables template
 ```
@@ -139,7 +149,7 @@ uv venv
 uv pip install -r requirements.txt
 
 # Run backend pytest suite with uv
-uv run pytest tests/test_app.py tests/test_contract.py -v
+uv run pytest tests/test_app.py tests/test_contract.py tests/test_events.py -v
 
 # Flutter unit / widget / API-contract tests
 cd flutter_frontend; flutter test; cd ..

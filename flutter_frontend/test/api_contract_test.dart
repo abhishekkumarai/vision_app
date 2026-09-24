@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flutter_frontend/models/chat.dart';
+import 'package:flutter_frontend/models/detection.dart';
 import 'package:flutter_frontend/services/api_service.dart';
 
 void main() {
@@ -61,6 +62,33 @@ void main() {
     });
     expect(reply!.answer, 'Yes.');
     expect(reply.modelUsed, 'Offline Smart Assistant');
+  });
+
+  test('postEvent sends DetectionEvent to /api/events (KAN-91)', () async {
+    final api = serviceReturning({'id': 7, 'status': 'queued', 'detail': 'workflows: identify_object'});
+    final res = await api.postEvent(
+      detection: DetectedObject(
+        label: 'cup',
+        confidence: 0.87,
+        box2d: const Box2D(ymin: -0.01, xmin: 0.1, ymax: 0.6, xmax: 1.02),
+      ),
+      source: 'flutter-web',
+      clientId: 'device-1',
+      imageB64: 'CCCC',
+      provider: 'mock',
+    );
+    expect(sentPath, '/api/events');
+    expect(sentBody, {
+      'type': 'object_appeared',
+      'label': 'cup',
+      'confidence': 0.87,
+      'box': {'xmin': 0.1, 'ymin': 0.0, 'xmax': 1.0, 'ymax': 0.6}, // clamped to the schema's 0..1
+      'image_b64': 'CCCC',
+      'source': 'flutter-web',
+      'client_id': 'device-1',
+      'provider': 'mock',
+    });
+    expect(res!['status'], 'queued');
   });
 
   test('getProviders parses {available: [...]}', () async {

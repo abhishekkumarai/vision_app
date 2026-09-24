@@ -15,6 +15,8 @@ services:
       - DEBUG=False
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - vision-events:/app/backend/data   # SQLite event/workflow store (KAN-89)
     restart: unless-stopped
     networks:
       - vision-net
@@ -53,3 +55,6 @@ services:
 networks:
   vision-net:
     driver: bridge
+
+volumes:
+  vision-events:
