@@ -245,7 +245,9 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const clickX = (e.clientX - rect.left) * scaleX;
+    // The canvas is CSS-mirrored (scale-x-[-1]) to match the selfie video, so a
+    // click at screen-left lands on the right side of the canvas' own pixel space.
+    const clickX = canvas.width - (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
 
     for (const det of detectionsRef.current) {

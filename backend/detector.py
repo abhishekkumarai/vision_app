@@ -18,6 +18,9 @@ from backend.config import settings
 from backend.models.download_models import ensure_model_downloaded
 from backend.schemas import BoundingBox, DetectionItem
 
+# (detections, processing_time_ms, (image_width, image_height)); boxes are in pixels.
+DetectionResult = Tuple[List[DetectionItem], float, Tuple[int, int]]
+
 class MediaPipeDetector:
     def __init__(self, model_path: str = None, threshold: float = None, max_results: int = None):
         self.model_path = model_path or settings.MEDIAPIPE_MODEL_PATH
@@ -44,10 +47,10 @@ class MediaPipeDetector:
     def is_ready(self) -> bool:
         return self.detector is not None
 
-    def detect_image(self, pil_image: Image.Image) -> Tuple[List[DetectionItem], float]:
-        """Detect objects in a PIL Image."""
+    def detect_image(self, pil_image: Image.Image) -> DetectionResult:
+        """Detect objects in a PIL Image. Returns (detections, ms, (width, height)); boxes are in pixels."""
         if not self.is_ready():
-            return [], 0.0
+            return [], 0.0, pil_image.size
 
         start_time = time.perf_counter()
         
@@ -82,13 +85,13 @@ class MediaPipeDetector:
                 )
             )
 
-        return detections, processing_time
+        return detections, processing_time, pil_image.size
 
-    def detect_from_bytes(self, image_bytes: bytes) -> Tuple[List[DetectionItem], float]:
+    def detect_from_bytes(self, image_bytes: bytes) -> DetectionResult:
         pil_image = Image.open(io.BytesIO(image_bytes))
         return self.detect_image(pil_image)
 
-    def detect_from_b64(self, b64_str: str) -> Tuple[List[DetectionItem], float]:
+    def detect_from_b64(self, b64_str: str) -> DetectionResult:
         if "," in b64_str:
             b64_str = b64_str.split(",", 1)[1]
         image_bytes = base64.b64decode(b64_str)

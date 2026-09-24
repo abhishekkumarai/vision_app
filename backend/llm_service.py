@@ -2,6 +2,7 @@
 Unified LLM Service supporting Ollama, Google GenAI, and offline Mock provider.
 Traceability: Epic KAN-49, Task KAN-52
 """
+import asyncio
 import base64
 import json
 import os
@@ -295,18 +296,18 @@ class LLMService:
                 if "," in image_b64:
                     image_b64 = image_b64.split(",", 1)[1]
                 image_bytes = base64.b64decode(image_b64)
-                response = client.models.generate_content(
-                    model=self.gemini_model,
-                    contents=[
-                        genai.types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                        prompt
-                    ]
-                )
+                contents: Any = [
+                    genai.types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                    prompt
+                ]
             else:
-                response = client.models.generate_content(
-                    model=self.gemini_model,
-                    contents=prompt
-                )
+                contents = prompt
+            # The google-genai client call is blocking; run it off the event loop.
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=self.gemini_model,
+                contents=contents
+            )
             return response.text
         except Exception as e:
             print(f"[LLMService] Gemini query failed: {e}")
@@ -390,6 +391,7 @@ class LLMService:
             f"You are a helpful visual assistant answering a question about '{obj_name}'.\n"
             f"Context: {obj_summary}\n"
             f"Specs: {obj_specs}\n"
+            f"{self._format_history(history)}"
             f"User Question: {question}\n\n"
             f"Provide a clear, engaging, and accurate answer in 2-4 sentences."
         )
@@ -416,6 +418,20 @@ class LLMService:
             answer=fallback_answer,
             model_used="Offline Smart Assistant"
         )
+
+    @staticmethod
+    def _format_history(history: Optional[List[Dict[str, str]]], max_turns: int = 8) -> str:
+        """Renders the most recent chat turns so follow-up questions keep their context."""
+        lines = []
+        for msg in (history or [])[-max_turns:]:
+            content = (msg.get("content") or "").strip()
+            if not content:
+                continue
+            speaker = "User" if msg.get("role") == "user" else "Assistant"
+            lines.append(f"{speaker}: {content}")
+        if not lines:
+            return ""
+        return "Conversation so far:\n" + "\n".join(lines) + "\n"
 
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
         """Extracts JSON object from possible markdown code fences."""

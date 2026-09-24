@@ -11,6 +11,7 @@ except ImportError:
     torch = None
     HAS_TORCH = False
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -66,11 +67,18 @@ async def detect_objects(req: DetectionRequest):
         raise HTTPException(status_code=503, detail="MediaPipe detector not initialized")
 
     try:
-        detections, processing_time = detector_instance.detect_from_b64(req.image_b64)
+        # MediaPipe inference is CPU-bound and synchronous: keep it off the event loop.
+        detections, processing_time, (width, height) = await run_in_threadpool(
+            detector_instance.detect_from_b64, req.image_b64
+        )
+        if req.threshold is not None:
+            detections = [d for d in detections if d.score >= req.threshold]
         return DetectionResponse(
             detections=detections,
             count=len(detections),
-            processing_time_ms=processing_time
+            processing_time_ms=processing_time,
+            image_width=width,
+            image_height=height
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")

@@ -24,56 +24,59 @@ void main() {
       expect(rect.bottom, 250.0);
     });
 
-    test('DetectionResponse parsed from JSON', () {
+    test('DetectionResponse parses backend pixel boxes into normalized Box2D', () {
+      // Shape of backend DetectionResponse (backend/schemas.py).
       final json = {
         'detections': [
           {
             'label': 'cell phone',
-            'confidence': 0.94,
-            'box_2d': [0.1, 0.2, 0.6, 0.7],
+            'score': 0.94,
+            'bounding_box': {'origin_x': 64, 'origin_y': 48, 'width': 320, 'height': 240},
           },
-          {
-            'label': 'laptop',
-            'confidence': 0.88,
-            'box_2d': [0.3, 0.4, 0.9, 0.95],
-          }
         ],
-        'count': 2,
-        'inference_time_ms': 18.5,
+        'count': 1,
+        'processing_time_ms': 18.5,
+        'image_width': 640,
+        'image_height': 480,
       };
 
       final response = DetectionResponse.fromJson(json);
-      expect(response.count, 2);
+      expect(response.count, 1);
       expect(response.inferenceTimeMs, 18.5);
-      expect(response.detections.length, 2);
-      expect(response.detections.first.label, 'cell phone');
-      expect(response.detections.first.confidence, 0.94);
+      final d = response.detections.single;
+      expect(d.label, 'cell phone');
+      expect(d.confidence, 0.94);
+      expect(d.box2d.xmin, closeTo(0.1, 1e-9));
+      expect(d.box2d.ymin, closeTo(0.1, 1e-9));
+      expect(d.box2d.xmax, closeTo(0.6, 1e-9));
+      expect(d.box2d.ymax, closeTo(0.6, 1e-9));
     });
   });
 
   group('Identification and Chat Models', () {
-    test('IdentifyResponse parses encyclopedic intelligence fields', () {
+    test('IdentifyResponse parses backend ObjectInsights', () {
       final json = {
-        'label': 'laptop',
-        'identified_name': 'Portable Laptop Computer',
-        'confidence': 0.92,
-        'description': 'Portable personal computer.',
+        'name': 'Portable Laptop Computer',
         'category': 'Electronics',
-        'history': 'First modern laptop was Grid Compass.',
-        'technical_specs': {'display': '15.6 inch', 'battery': '70Wh'},
+        'summary': 'Portable personal computer.',
+        'primary_uses': ['Work', 'Study'],
+        'materials_and_specs': ['Aluminium chassis'],
+        'safety_and_maintenance': ['Clean dust filters every 6 months'],
         'fun_facts': ['Laptops outsold desktops first in 2005'],
-        'maintenance_tips': ['Clean dust filters every 6 months'],
-        'provider_used': 'ollama',
+        'suggested_questions': ['How long does the battery last?'],
+        'model_used': 'Ollama (gemma2:2b)',
       };
 
-      final info = IdentifyResponse.fromJson(json);
+      final info = IdentifyResponse.fromJson(json, label: 'laptop', confidence: 0.92);
       expect(info.label, 'laptop');
-      expect(info.identifiedName, 'Portable Laptop Computer');
-      expect(info.category, 'Electronics');
-      expect(info.technicalSpecs['display'], '15.6 inch');
-      expect(info.funFacts.length, 1);
-      expect(info.maintenanceTips.length, 1);
-      expect(info.providerUsed, 'ollama');
+      expect(info.confidence, 0.92);
+      expect(info.name, 'Portable Laptop Computer');
+      expect(info.primaryUses, ['Work', 'Study']);
+      expect(info.safetyAndMaintenance.length, 1);
+      expect(info.suggestedQuestions.single, 'How long does the battery last?');
+      expect(info.modelUsed, 'Ollama (gemma2:2b)');
+      // Round-trips to the ObjectInsights shape used as chat object_context.
+      expect(info.toJson()['materials_and_specs'], ['Aluminium chassis']);
     });
 
     test('ChatMessage handles roles and serialization', () {

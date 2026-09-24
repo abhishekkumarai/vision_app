@@ -48,8 +48,20 @@ docker compose up -d
 ```
 
 ### Accessing the App:
-- **Frontend UI**: Open your browser at **[http://localhost:3010](http://localhost:3010)**
+- **Frontend UI (Next.js)**: Open your browser at **[http://localhost:3010](http://localhost:3010)**
+- **Frontend UI (Flutter web)**: **[http://localhost:3020](http://localhost:3020)**
 - **Backend API Docs**: Swagger UI at **[http://localhost:8000/docs](http://localhost:8000/docs)**
+
+> **Flutter web must be built before `docker compose build`** — its image only copies the prebuilt `flutter_frontend/build/web` into nginx:
+> ```powershell
+> cd flutter_frontend; flutter build web --release; cd ..
+> docker compose up -d --build flutter-web
+> ```
+> For `flutter run -d chrome` (no nginx proxy) point it at the backend: `--dart-define=BACKEND_URL=http://localhost:8000`.
+
+> **Ollama model:** the backend requests `OLLAMA_MODEL` (default `gemma2:2b`). If that model isn't pulled, every request silently falls back to the offline knowledge base — `ollama pull gemma2:2b` or set `OLLAMA_MODEL` in `.env` to a model you have.
+
+Troubleshooting: [`troubleshoot.md`](troubleshoot.md) · Task tracking: [`TASKS.md`](TASKS.md) (Jira epic KAN-66) · Architecture orientation for humans & LLMs: [`LLM.md`](LLM.md)
 
 To view real-time logs:
 ```powershell
@@ -100,9 +112,15 @@ vision_app/
 │   ├── next.config.mjs        # Next.js configuration (output: standalone)
 │   └── package.json           # Next.js dependencies
 │
+├── flutter_frontend/          # Flutter client (web / Android / iOS), nginx on :3020
+│   ├── lib/                   # state/, services/, models/, widgets/, views/
+│   ├── packages/camera_web/   # Patched camera_web (skips unopenable virtual cameras)
+│   └── nginx.conf             # SPA + /api reverse proxy, no-cache for entry files
+│
 ├── frontend_static/           # Preserved standalone static HTML fallback
 ├── tests/
-│   └── test_app.py            # Automated pytest suite
+│   ├── test_app.py            # Automated pytest suite
+│   └── test_contract.py       # API request/response contract tests
 ├── requirements.txt           # Python backend dependencies
 └── .env.example               # Environment variables template
 ```
@@ -121,7 +139,10 @@ uv venv
 uv pip install -r requirements.txt
 
 # Run backend pytest suite with uv
-uv run pytest tests/test_app.py -v
+uv run pytest tests/test_app.py tests/test_contract.py -v
+
+# Flutter unit / widget / API-contract tests
+cd flutter_frontend; flutter test; cd ..
 
 # Start FastAPI backend directly with uv
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload

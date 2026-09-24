@@ -24,6 +24,8 @@ class DetectionResponse(BaseModel):
     detections: List[DetectionItem]
     count: int
     processing_time_ms: float
+    image_width: int = Field(0, description="Width of the analysed frame in pixels (bounding boxes are in this pixel space)")
+    image_height: int = Field(0, description="Height of the analysed frame in pixels")
 
 class IdentifyRequest(BaseModel):
     label: str = Field(..., description="Object name or label to identify")
