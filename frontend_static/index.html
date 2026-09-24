@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediaPipe Vision Lens & LLM Intelligence</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              cyan: '#06b6d4',
+              emerald: '#10b981',
+              dark: '#030712'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Custom HUD Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-[#030712] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-cyan-950/80 bg-[#060b19]/90 backdrop-blur-md px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
+    <div class="flex items-center space-x-3">
+      <div class="relative w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-400 p-[1px] flex items-center justify-center shadow-lg shadow-cyan-500/20">
+        <div class="w-full h-full bg-slate-950 rounded-lg flex items-center justify-center">
+          <svg class="w-4 h-4 text-cyan-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        </div>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wider text-slate-100 flex items-center space-x-2">
+          <span>MEDIAPIPE VISION LENS</span>
+          <span class="text-cyan-400 font-mono text-xs">// LLM REASONING</span>
+        </h1>
+        <p class="text-[10px] text-slate-400 font-mono">Traceability: Epic KAN-49 • Real-Time Tracking & Deep Intelligence</p>
+      </div>
+    </div>
+
+    <!-- Status Badges & Provider Picker -->
+    <div class="flex items-center flex-wrap gap-2.5">
+      <!-- MediaPipe Status -->
+      <div id="statusEngine" class="text-xs font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/80 px-2.5 py-1 rounded-full flex items-center">
+        <span class="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1.5 animate-ping"></span>
+        MediaPipe: Initializing...
+      </div>
+
+      <!-- GPU Status -->
+      <div id="statusGpu" class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-1 rounded-full flex items-center">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+        Detecting GPU...
+      </div>
+
+      <!-- Target Count -->
+      <div id="trackingCount" class="text-xs font-mono text-slate-300 bg-slate-900 border border-slate-700 px-2.5 py-1 rounded-full">
+        TARGETS: 0
+      </div>
+
+      <!-- LLM Provider Select -->
+      <div class="flex items-center space-x-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-lg">
+        <span class="text-[11px] font-mono text-slate-400">LLM:</span>
+        <select id="providerSelect" class="bg-transparent text-xs font-semibold text-cyan-400 focus:outline-none cursor-pointer">
+          <option value="ollama" class="bg-slate-900 text-slate-200">Ollama (Gemma 2 / Vision)</option>
+          <option value="gemini" class="bg-slate-900 text-slate-200">Google Gemini (Cloud)</option>
+          <option value="mock" class="bg-slate-900 text-slate-200">Offline Fast Engine</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <main class="flex-1 p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1720px] mx-auto w-full">
+
+    <!-- Left: Video Viewfinder & HUD Canvas -->
+    <div class="lg:col-span-7 flex flex-col space-y-4">
+      <div class="relative bg-slate-950 border border-cyan-900/40 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[440px] aspect-video">
+        <!-- Scanline Overlay -->
+        <div class="hud-scanline"></div>
+
+        <!-- Video Feed -->
+        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform scale-x-[-1]"></video>
+
+        <!-- Canvas HUD Overlay -->
+        <canvas id="hudCanvas" class="absolute inset-0 w-full h-full pointer-events-auto cursor-crosshair transform scale-x-[-1]"></canvas>
+
+        <!-- Viewfinder Decorative HUD Elements -->
+        <div class="absolute top-4 left-4 pointer-events-none flex flex-col space-y-1">
+          <div class="text-[11px] font-mono text-cyan-400 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded border border-cyan-800/40">
+            OPTICAL FEED: 1280x720 60FPS
+          </div>
+          <div class="text-[9px] font-mono text-slate-400 bg-black/40 px-2 py-0.5 rounded">
+            CLICK ON ANY BOUNDING BOX TO LOCK
+          </div>
+        </div>
+
+        <div class="absolute top-4 right-4 pointer-events-none">
+          <div class="w-8 h-8 rounded-full border border-cyan-500/30 flex items-center justify-center">
+            <div class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Viewfinder Action Bar -->
+      <div class="bg-slate-950/90 border border-slate-800/80 backdrop-blur-md p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-lg">
+        <div class="flex items-center space-x-2.5">
+          <button id="btnToggleCam" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-sm rounded-lg shadow-lg shadow-cyan-500/20 flex items-center transition-all">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+            Start Camera
+          </button>
+
+          <button id="btnAutoLock" class="px-3 py-2 bg-emerald-950/80 border border-emerald-600 text-emerald-300 text-xs font-mono rounded-lg transition-all">
+            AUTO-LOCK: ON
+          </button>
+        </div>
+
+        <button id="btnInspect" disabled class="opacity-50 cursor-not-allowed px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-extrabold text-sm rounded-lg shadow-lg shadow-cyan-500/30 flex items-center transition-all">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          INSPECT WITH LLM
+        </button>
+      </div>
+    </div>
+
+    <!-- Right: LLM Insights & Interactive Intelligence HUD -->
+    <div class="lg:col-span-5 flex flex-col space-y-4">
+      <div class="bg-slate-950/80 border border-cyan-900/40 rounded-2xl p-5 shadow-2xl flex-1 flex flex-col backdrop-blur-md overflow-hidden min-h-[580px]">
+        
+        <!-- Empty / Idle State -->
+        <div id="insightsPlaceholder" class="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+          <div class="w-16 h-16 rounded-2xl bg-cyan-950/40 border border-cyan-800/40 flex items-center justify-center text-cyan-400 mb-2">
+            <svg class="w-8 h-8 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Awaiting Target Acquisition</h3>
+          <p class="text-xs text-slate-400 max-w-xs leading-relaxed">
+            Start the camera and position an object in frame. Click <span class="text-cyan-400 font-semibold">INSPECT WITH LLM</span> to identify it and query deep knowledge.
+          </p>
+        </div>
+
+        <!-- Loading State -->
+        <div id="insightsLoading" class="hidden flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+          <div class="relative w-16 h-16">
+            <div class="w-16 h-16 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin"></div>
+            <div class="absolute inset-0 flex items-center justify-center text-cyan-400 text-[10px] font-mono">
+              AI
+            </div>
+          </div>
+          <p class="text-xs font-mono text-cyan-400 animate-pulse tracking-wide">
+            GENERATING MULTIMODAL INTELLIGENCE...
+          </p>
+        </div>
+
+        <!-- Active Insights Content -->
+        <div id="insightsContent" class="hidden flex-1 flex flex-col space-y-4 overflow-y-auto pr-1">
+          <!-- Target Header Profile -->
+          <div class="flex items-start justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-3">
+              <img id="targetThumbnail" class="w-14 h-14 rounded-lg object-cover border border-cyan-500/50 shadow-md bg-slate-900" alt="Target crop">
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h2 id="targetName" class="text-base font-extrabold text-white tracking-tight"></h2>
+                  <span id="targetCategory" class="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full"></span>
+                </div>
+                <div class="flex items-center space-x-2 text-[11px] font-mono mt-0.5">
+                  <span id="targetConfidence" class="text-emerald-400 font-semibold"></span>
+                  <span class="text-slate-600">•</span>
+                  <span id="targetModel" class="text-slate-400"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Read Aloud Speech Button -->
+            <button id="btnSpeak" title="Read summary aloud" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-cyan-400 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Overview Summary -->
+          <div class="bg-slate-900/60 border border-slate-800/80 p-3 rounded-xl">
+            <h4 class="text-[10px] font-mono text-cyan-400 uppercase tracking-wider mb-1">Executive Summary</h4>
+            <p id="targetSummary" class="text-xs text-slate-200 leading-relaxed"></p>
+          </div>
+
+          <!-- Grid of Details -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Primary Uses -->
+            <div class="bg-slate-900/60 border border-slate-800/80 p-3 rounded-xl flex flex-col">
+              <h4 class="text-[10px] font-mono text-cyan-400 uppercase tracking-wider mb-2">Primary Uses</h4>
+              <ul id="usesList" class="space-y-1.5 flex-1"></ul>
+            </div>
+
+            <!-- Technical Specs -->
+            <div class="bg-slate-900/60 border border-slate-800/80 p-3 rounded-xl flex flex-col">
+              <h4 class="text-[10px] font-mono text-purple-400 uppercase tracking-wider mb-2">Specs & Materials</h4>
+              <ul id="specsList" class="space-y-1.5 flex-1"></ul>
+            </div>
+
+            <!-- Safety & Maintenance -->
+            <div class="bg-slate-900/60 border border-slate-800/80 p-3 rounded-xl flex flex-col">
+              <h4 class="text-[10px] font-mono text-amber-400 uppercase tracking-wider mb-2">Care & Handling</h4>
+              <ul id="safetyList" class="space-y-1.5 flex-1"></ul>
+            </div>
+
+            <!-- Fun Facts / Trivia -->
+            <div class="bg-slate-900/60 border border-slate-800/80 p-3 rounded-xl flex flex-col">
+              <h4 class="text-[10px] font-mono text-emerald-400 uppercase tracking-wider mb-2">Trivia & History</h4>
+              <ul id="factsList" class="space-y-1.5 flex-1"></ul>
+            </div>
+          </div>
+
+          <!-- Suggested Questions -->
+          <div>
+            <h4 class="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-2">Quick Inquiries</h4>
+            <div id="questionsContainer" class="flex flex-col space-y-1.5"></div>
+          </div>
+
+          <!-- Follow-up Q&A Interactive Chat -->
+          <div class="border-t border-slate-800 pt-3 flex flex-col space-y-2.5">
+            <h4 class="text-[10px] font-mono text-cyan-400 uppercase tracking-wider">Interactive Q&A</h4>
+            <div id="chatMessages" class="max-h-40 overflow-y-auto space-y-2 p-1"></div>
+            <div class="flex items-center space-x-2">
+              <input id="chatInput" type="text" placeholder="Ask anything about this item..." class="flex-1 bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition-colors">
+              <button id="btnSendChat" class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-lg text-xs transition-colors">
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script src="/static/js/speech.js"></script>
+  <script src="/static/js/hud.js"></script>
+  <script src="/static/js/camera.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
