@@ -38,6 +38,12 @@ dependencies:
   provider: ^6.1.5+1
   camera: ^0.12.1
 
+# Patched copy of camera_web 0.3.5+6: tolerates individual cameras that fail to
+# open (e.g. OBS Virtual Camera) instead of failing availableCameras() entirely.
+dependency_overrides:
+  camera_web:
+    path: packages/camera_web
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
